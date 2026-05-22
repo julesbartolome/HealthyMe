@@ -7,6 +7,7 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven { url = uri("https://developer.samsung.com/maven") }
         mavenCentral()
         gradlePluginPortal()
     }

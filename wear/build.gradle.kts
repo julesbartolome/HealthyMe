@@ -13,7 +13,7 @@ android {
     defaultConfig {
         applicationId = "com.example.healthyme"
         minSdk = 30
-        targetSdk = 36
+        targetSdk = 33
         versionCode = 1
         versionName = "1.0"
 
@@ -42,6 +42,11 @@ android {
 }
 
 dependencies {
+    implementation("androidx.health:health-services-client:1.1.0-rc01")
+    implementation(files("libs/samsung-health-data-api-1.1.0.aar"))
+    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.guava:guava:33.0.0-android")
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
     implementation(libs.play.services.wearable)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -57,3 +62,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
