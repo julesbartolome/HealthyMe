@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.colorspace.connect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,11 +30,18 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.example.healthyme.presentation.theme.HealthyMeTheme
 import kotlinx.coroutines.launch
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 
 // ... existing imports ...
 
 class MainActivity : ComponentActivity() {private val heartRateValue = mutableStateOf("--")
     private val heartRateStatus = mutableStateOf("Starting...")
+    private val sleepValue = mutableStateOf("--")
+    private val sleepStatus = mutableStateOf("Fetching...")
+
+    // Initialize Health Connect Client
+    private val healthConnectClient by lazy { androidx.health.connect.client.HealthConnectClient.getOrCreate(this) }
 
     private lateinit var heartRateCallback: MeasureCallback
     // Declare measureClient at class level so it's accessible in functions
@@ -107,26 +115,36 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
 
-            val granted =
-                permissions[android.Manifest.permission.BODY_SENSORS] == true
+            val granted = permissions[android.Manifest.permission.BODY_SENSORS] == true
+            val sleepGranted = permissions["android.permission.health.READ_SLEEP"] == true
 
             if (granted) {
                 prepareHealthServices()
             } else {
                 heartRateStatus.value = "Permission Denied"
             }
+
+            if (sleepGranted) {
+                fetchSleepData()
+            }
         }
 
-        // 5. Launch Permission Request
+        // In onCreate, update the array:
         permissionRequest.launch(
-            arrayOf(android.Manifest.permission.BODY_SENSORS)
+            arrayOf(
+                android.Manifest.permission.BODY_SENSORS,
+                "android.permission.health.READ_SLEEP" // Add this string
+            )
         )
+
 
         setContent {
             HealthyMeTheme {
                 HealthyMeDashboard(
                     heartRate = heartRateValue.value,
-                    heartRateStatus = heartRateStatus.value
+                    heartRateStatus = heartRateStatus.value,
+                    sleepValue = sleepValue.value,
+                    sleepStatus = sleepStatus.value
                 )
             }
         }
@@ -136,6 +154,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
     private fun prepareHealthServices() {
         lifecycleScope.launch {
             try {
+                measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, heartRateCallback)
                 val config = androidx.health.services.client.data.ExerciseConfig(
                     exerciseType = androidx.health.services.client.data.ExerciseType.WALKING,                    dataTypes = setOf(DataType.HEART_RATE_BPM),
                     isAutoPauseAndResumeEnabled = false,
@@ -164,6 +183,42 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
             }
         }
     }
+
+    private fun fetchSleepData() {
+        lifecycleScope.launch {
+            try {
+                // 1. Define the time range (e.g., the last 24 hours)
+                val end = java.time.Instant.now()
+                val start = end.minus(java.time.Duration.ofDays(1))
+
+                // 2. Request sleep sessions
+                val response = healthConnectClient.readRecords(
+                    androidx.health.connect.client.request.ReadRecordsRequest(
+                        recordType = androidx.health.connect.client.records.SleepSessionRecord::class,
+                        timeRangeFilter = androidx.health.connect.client.time.TimeRangeFilter.between(start, end)
+                    )
+                )
+
+                // 3. Sum up the duration of all sleep sessions found
+                if (response.records.isNotEmpty()) {
+                    val totalMinutes = response.records.sumOf { record ->
+                        java.time.Duration.between(record.startTime, record.endTime).toMinutes()
+                    }
+                    val hours = totalMinutes / 60
+                    val mins = totalMinutes % 60
+
+                    sleepValue.value = String.format("%d:%02d", hours, mins)
+                    sleepStatus.value = "Last 24h"
+                } else {
+                    sleepValue.value = "0"
+                    sleepStatus.value = "No sleep recorded"
+                }
+            } catch (e: Exception) {
+                sleepStatus.value = "Error reading sleep"
+                android.util.Log.e("HealthyMe", "Sleep fetch failed", e)
+            }
+        }
+    }
 }
 
 // ── Colour palette ─────────────────────────────────────────────
@@ -175,60 +230,83 @@ val CardBg   = Color(0xFF1E1E1E)
 
 // ── Root dashboard ─────────────────────────────────────────────
 @Composable
-fun HealthyMeDashboard(heartRate: String, heartRateStatus: String) {
+fun HealthyMeDashboard(
+    heartRate: String,
+    heartRateStatus: String,
+    sleepValue: String,
+    sleepStatus: String
+) {
+    // Create a scroll state for the list
+    val listState = rememberScalingLazyListState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBg),
         contentAlignment = Alignment.Center
     ) {
-        TimeText()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 24.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
+        TimeText() // Keeps time at the top
+
+        ScalingLazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            // Adds padding so the first/last items aren't cut off by the screen curves
+            contentPadding = PaddingValues(
+                top = 32.dp,
+                start = 8.dp,
+                end = 8.dp,
+                bottom = 32.dp
+            ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = "HealthyMe",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            DashboardCard(
-                emoji = "❤️",
-                label = "Heart Rate",
-                value = heartRate,
-                unit = "BPM",
-                subtext = heartRateStatus,
-                accentColor = CardRed
-            )
-            DashboardCard(
-                emoji = "🌙",
-                label = "Sleep",
-                value = "--",
-                unit = "hrs",
-                subtext = "Coming soon",
-                accentColor = CardBlue
-            )
-            DashboardCard(
-                emoji = "💧",
-                label = "Hydration",
-                value = "--",
-                unit = "ml",
-                subtext = "Coming soon",
-                accentColor = CardCyan
-            )
-            DashboardCard(
-                emoji = "💧",
-                label = "...",
-                value = "--",
-                unit = "ml",
-                subtext = "Coming soon",
-                accentColor = CardCyan
-            )
+            // Header
+            item {
+                Text(
+                    text = "HealthyMe",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            // Heart Rate Card
+            item {
+                DashboardCard(
+                    emoji = "❤️",
+                    label = "Heart Rate",
+                    value = heartRate,
+                    unit = "BPM",
+                    subtext = heartRateStatus,
+                    accentColor = CardRed
+                )
+            }
+
+            // Sleep Card
+            item {
+                DashboardCard(
+                    emoji = "🌙",
+                    label = "Sleep",
+                    value = sleepValue,
+                    unit = "hrs",
+                    subtext = sleepStatus,
+                    accentColor = CardBlue
+                )
+            }
+
+            // Hydration Card
+            item {
+                DashboardCard(
+                    emoji = "💧",
+                    label = "Hydration",
+                    value = "--",
+                    unit = "ml",
+                    subtext = "Coming soon",
+                    accentColor = CardCyan
+                )
+            }
         }
     }
 }
