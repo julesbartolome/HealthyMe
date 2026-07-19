@@ -1,6 +1,8 @@
-package com.example.healthyme.ui
+package com.example.healthyme.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -19,14 +21,13 @@ fun HealthCard(
     value: String,
     unit: String,
     subtitle: String,
-    color: Color
+    accentColor: Color
 ) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        )
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(6.dp)
     ) {
 
         Row(
@@ -46,9 +47,12 @@ fun HealthCard(
                     fontSize = 28.sp
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = title,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
                 )
 
                 Text(
@@ -63,7 +67,7 @@ fun HealthCard(
 
                 Text(
                     text = value,
-                    color = color,
+                    color = accentColor,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -74,6 +78,9 @@ fun HealthCard(
                     text = unit
                 )
             }
+
         }
+
     }
+
 }

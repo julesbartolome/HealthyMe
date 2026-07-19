@@ -3,9 +3,8 @@ package com.example.healthyme
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import com.example.healthyme.ui.DashboardScreen
+import com.example.healthyme.ui.screens.DashboardScreen
+import com.example.healthyme.ui.theme.HealthyMeTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -13,11 +12,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
-                Surface {
-                    DashboardScreen()
-                }
+
+            HealthyMeTheme {
+
+                DashboardScreen()
+
             }
+
         }
     }
 }
