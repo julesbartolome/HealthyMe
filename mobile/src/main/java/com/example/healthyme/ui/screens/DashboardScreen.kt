@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.example.healthyme.ui.components.HealthCard
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthyme.viewmodel.DashboardViewModel
+import com.example.healthyme.wear.HeartRateState
 @Composable
 fun DashboardScreen() {
 
@@ -52,7 +53,11 @@ fun DashboardScreen() {
             HealthCard(
                 emoji = "❤️",
                 title = "Heart Rate",
-                value = healthData.heartRate.toString(),
+                value =
+                    if (HeartRateState.heartRate.value == "--")
+                        healthData.heartRate.toString()
+                    else
+                        HeartRateState.heartRate.value,
                 unit = "BPM",
                 subtitle = "Normal",
                 accentColor = Color(0xFFE53935)

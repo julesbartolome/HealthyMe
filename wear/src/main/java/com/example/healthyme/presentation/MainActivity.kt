@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
     private lateinit var measureClient: androidx.health.services.client.MeasureClient
     private lateinit var exerciseClient: androidx.health.services.client.ExerciseClient
     private lateinit var exerciseCallback: androidx.health.services.client.ExerciseUpdateCallback
+    private lateinit var phoneMessenger: PhoneMessenger
 
     override fun onCreate(savedInstanceState: Bundle?) {installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
         val healthClient = HealthServices.getClient(this)
         measureClient = healthClient.measureClient
         exerciseClient = healthClient.exerciseClient
+        phoneMessenger = PhoneMessenger(this)
 
         // 2. Define the MeasureCallback (for heart rate)
         heartRateCallback = object : MeasureCallback {
@@ -73,6 +75,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
                 val heartRatePoints = data.getData(DataType.HEART_RATE_BPM)
                 heartRatePoints.lastOrNull()?.let { point ->
                     heartRateValue.value = "${point.value.toInt()}"
+                    phoneMessenger.sendHeartRate(point.value.toInt())
                     heartRateStatus.value = "Good signal"
                 }
             }
