@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    kotlin("kapt")
 }
 
 android {
@@ -68,4 +69,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
 
     implementation(libs.play.services.wearable)
+    implementation("androidx.room:room-runtime:2.8.0")
+    implementation("androidx.room:room-ktx:2.8.0")
+    kapt("androidx.room:room-compiler:2.8.0")
+    implementation("androidx.health.connect:connect-client:1.1.0")
 }

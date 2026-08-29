@@ -4,7 +4,7 @@
     <selectionStates>
       <SelectionState runConfigName="wear">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-08-09T13:49:15.278703500Z">
+        <DropdownSelection timestamp="2026-08-12T12:13:12.810684900Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CX42P1TFR" />
@@ -15,10 +15,10 @@
       </SelectionState>
       <SelectionState runConfigName="mobile">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-08-09T13:40:31.541845700Z">
+        <DropdownSelection timestamp="2026-08-12T12:12:07.461995100Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="Default" identifier="serial=192.168.1.4:34133;connection=6b9b8202" />
+              <DeviceId pluginId="Default" identifier="serial=192.168.1.7:36135;connection=1aa7c542" />
             </handle>
           </Target>
         </DropdownSelection>

@@ -1,15 +1,8 @@
 package com.example.healthyme.model
 
 data class HealthData(
-
-    val heartRate: Int,
-
-    val sleepHours: Double,
-
-    val hydration: Double,
-
-    val steps: Int,
-
-    val lifestyleScore: Int
-
+    val heartRate: Int = 0,
+    val sleepHours: String = "--",
+    val hydrationMl: Int = 0,
+    val steps: Int = 0
 )
