@@ -19,6 +19,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,12 +29,72 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthyme.viewmodel.DashboardViewModel
+import androidx.compose.ui.platform.LocalContext
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 
 @Composable
 fun DashboardScreen(
     onRequestSleepPermission: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
+
+    val context = LocalContext.current
+
+    /*
+     * Initialize the dashboard and load sleep data.
+     */
+    LaunchedEffect(Unit) {
+        dashboardViewModel.initialize(context)
+    }
+
+    /*
+     * Listen for heart-rate updates from the Watch.
+     *
+     * Every time HeartRateListenerService receives a new BPM,
+     * it sends the HEART_RATE_UPDATED broadcast.
+     */
+    DisposableEffect(context) {
+
+        val heartRateReceiver = object : BroadcastReceiver() {
+
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?
+            ) {
+
+                if (intent?.action == "com.example.healthyme.HEART_RATE_UPDATED") {
+
+                    val heartRate =
+                        intent.getIntExtra("heart_rate", 0)
+
+                    if (heartRate > 0) {
+
+                        android.util.Log.d(
+                            "HealthyMe",
+                            "Dashboard received live heart rate: $heartRate BPM"
+                        )
+
+                        dashboardViewModel.updateHeartRate(heartRate)
+                    }
+                }
+            }
+        }
+
+        ContextCompat.registerReceiver(
+            context,
+            heartRateReceiver,
+            IntentFilter("com.example.healthyme.HEART_RATE_UPDATED"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        onDispose {
+            context.unregisterReceiver(heartRateReceiver)
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -262,3 +324,4 @@ fun HealthCard(
         }
     }
 }
+

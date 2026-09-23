@@ -8,6 +8,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import com.example.healthyme.model.HealthData
 import java.time.Duration
 import java.time.Instant
+import com.example.healthyme.HeartRateListenerService
 
 class HealthRepository(
     private val context: Context
@@ -20,8 +21,8 @@ class HealthRepository(
 
         val end = Instant.now()
 
-        // Look back 24 hours
-        val start = end.minus(Duration.ofDays(1))
+        // Look back 7 days so we can find the latest completed sleep.
+        val start = end.minus(Duration.ofDays(7))
 
         val response = healthConnectClient.readRecords(
             ReadRecordsRequest(
@@ -30,12 +31,89 @@ class HealthRepository(
             )
         )
 
+        android.util.Log.d(
+            "HealthyMe",
+            "Sleep records found: ${response.records.size}"
+        )
+
+        if (response.records.isEmpty()) {
+
+            android.util.Log.d(
+                "HealthyMe",
+                "No sleep records found."
+            )
+
+            return HealthData(
+                heartRate = HeartRateListenerService.getLatestHeartRate(context),
+                sleepHours = "--",
+                hydrationMl = 1200,
+                steps = 6542
+            )
+        }
+
+        // Sort records from newest to oldest.
+        val sortedRecords = response.records
+            .sortedByDescending { it.endTime }
+
+        // The newest sleep record tells us which night we want.
+        val latestRecord = sortedRecords.first()
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Latest sleep record: " +
+                    "${latestRecord.startTime} -> ${latestRecord.endTime}"
+        )
+
+        /*
+         * Sleep can be split into multiple records.
+         *
+         * Example:
+         *
+         * 15:00 -> 23:00  = 8 hours
+         * 23:00 -> 00:00  = 1 hour
+         *
+         * Together:
+         *
+         * 9 hours
+         *
+         * We therefore include records that overlap the latest
+         * sleep period or are directly connected to it.
+         */
+
+        val latestEnd = latestRecord.endTime
+
+        // A sleep night can reasonably start up to 18 hours
+        // before the latest record ends.
+        val nightStart = latestEnd.minus(Duration.ofHours(18))
+
+        val latestNightRecords = response.records.filter { record ->
+
+            record.endTime.isAfter(nightStart) &&
+                    record.startTime.isBefore(latestEnd)
+        }
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Records belonging to latest night: " +
+                    latestNightRecords.size
+        )
+
         var totalMinutes = 0L
 
-        for (record in response.records) {
-            totalMinutes += Duration
+        for (record in latestNightRecords) {
+
+            val minutes = Duration
                 .between(record.startTime, record.endTime)
                 .toMinutes()
+
+            android.util.Log.d(
+                "HealthyMe",
+                "Latest night record: " +
+                        "${record.startTime} -> ${record.endTime} " +
+                        "($minutes minutes)"
+            )
+
+            totalMinutes += minutes
         }
 
         val hours = totalMinutes / 60
@@ -47,11 +125,18 @@ class HealthRepository(
             "--"
         }
 
+        android.util.Log.d(
+            "HealthyMe",
+            "Latest night's total sleep: $sleepText"
+        )
+
         return HealthData(
-            heartRate = 78,
+            heartRate = HeartRateListenerService.getLatestHeartRate(context),
             sleepHours = sleepText,
             hydrationMl = 1200,
             steps = 6542
         )
+
     }
 }
+

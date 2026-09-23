@@ -62,7 +62,7 @@
         </activity>
 
         <service
-            android:name=".wear.HeartRateListenerService"
+            android:name=".HeartRateListenerService"
             android:exported="true">
 
             <intent-filter>
