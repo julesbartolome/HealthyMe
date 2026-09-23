@@ -9,17 +9,39 @@ import com.example.healthyme.model.HealthData
 import java.time.Duration
 import java.time.Instant
 import com.example.healthyme.HeartRateListenerService
+import com.example.healthyme.data.database.HealthyMeDatabase
 
-class HealthRepository(
-    private val context: Context
-) {
+class HealthRepository(private val context: Context) {
 
     private val healthConnectClient =
         HealthConnectClient.getOrCreate(context)
 
+    private val database =
+        HealthyMeDatabase.getDatabase(context)
+
     suspend fun getTodayHealthData(): HealthData {
 
         val end = Instant.now()
+
+        val startOfDay = java.time.LocalDate
+            .now()
+            .atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant()
+
+        val endOfDay = startOfDay
+            .plus(Duration.ofDays(1))
+
+        val hydrationMl =
+            database.hydrationEventDao()
+                .getTotalHydrationForDay(
+                    startOfDay.toEpochMilli(),
+                    endOfDay.toEpochMilli()
+                )
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Today's hydration: $hydrationMl ml"
+        )
 
         // Look back 7 days so we can find the latest completed sleep.
         val start = end.minus(Duration.ofDays(7))
@@ -46,7 +68,7 @@ class HealthRepository(
             return HealthData(
                 heartRate = HeartRateListenerService.getLatestHeartRate(context),
                 sleepHours = "--",
-                hydrationMl = 1200,
+                hydrationMl = hydrationMl,
                 steps = 6542
             )
         }
@@ -133,7 +155,7 @@ class HealthRepository(
         return HealthData(
             heartRate = HeartRateListenerService.getLatestHeartRate(context),
             sleepHours = sleepText,
-            hydrationMl = 1200,
+            hydrationMl = hydrationMl,
             steps = 6542
         )
 

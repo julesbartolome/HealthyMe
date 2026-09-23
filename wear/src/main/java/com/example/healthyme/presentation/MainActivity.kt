@@ -36,6 +36,7 @@ import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 // ... existing imports ...
 
 class MainActivity : ComponentActivity() {private val heartRateValue = mutableStateOf("--")
+
     private val heartRateStatus = mutableStateOf("Starting...")
     private val sleepValue = mutableStateOf("--")
     private val sleepStatus = mutableStateOf("Fetching...")
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
 
     override fun onCreate(savedInstanceState: Bundle?) {installSplashScreen()
         super.onCreate(savedInstanceState)
+
         setTheme(android.R.style.Theme_DeviceDefault)
 
         // 1. Initialize Health Services clients
@@ -222,7 +224,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
             }
         }
     }
-}
+
 
 // ── Colour palette ─────────────────────────────────────────────
 val CardRed  = Color(0xFFE53935)

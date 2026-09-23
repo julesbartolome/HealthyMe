@@ -59,40 +59,61 @@ fun DashboardScreen(
      */
     DisposableEffect(context) {
 
-        val heartRateReceiver = object : BroadcastReceiver() {
+        val healthReceiver = object : BroadcastReceiver() {
 
             override fun onReceive(
                 context: Context?,
                 intent: Intent?
             ) {
 
-                if (intent?.action == "com.example.healthyme.HEART_RATE_UPDATED") {
+                when (intent?.action) {
 
-                    val heartRate =
-                        intent.getIntExtra("heart_rate", 0)
+                    "com.example.healthyme.HEART_RATE_UPDATED" -> {
 
-                    if (heartRate > 0) {
+                        val heartRate =
+                            intent.getIntExtra("heart_rate", 0)
+
+                        if (heartRate > 0) {
+
+                            android.util.Log.d(
+                                "HealthyMe",
+                                "Dashboard received live heart rate: $heartRate BPM"
+                            )
+
+                            dashboardViewModel.updateHeartRate(heartRate)
+                        }
+                    }
+
+                    "com.example.healthyme.HYDRATION_UPDATED" -> {
+
+                        val hydration =
+                            intent.getIntExtra("hydration_ml", 0)
 
                         android.util.Log.d(
                             "HealthyMe",
-                            "Dashboard received live heart rate: $heartRate BPM"
+                            "Dashboard received hydration update: $hydration ml"
                         )
 
-                        dashboardViewModel.updateHeartRate(heartRate)
+                        dashboardViewModel.updateHydration(hydration)
                     }
                 }
             }
         }
 
+        val intentFilter = IntentFilter().apply {
+            addAction("com.example.healthyme.HEART_RATE_UPDATED")
+            addAction("com.example.healthyme.HYDRATION_UPDATED")
+        }
+
         ContextCompat.registerReceiver(
             context,
-            heartRateReceiver,
-            IntentFilter("com.example.healthyme.HEART_RATE_UPDATED"),
+            healthReceiver,
+            intentFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
         onDispose {
-            context.unregisterReceiver(heartRateReceiver)
+            context.unregisterReceiver(healthReceiver)
         }
     }
 

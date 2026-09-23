@@ -60,4 +60,10 @@ class DashboardViewModel : ViewModel() {
             heartRate = heartRate
         )
     }
+
+    fun updateHydration(hydrationMl: Int) {
+        healthData = healthData.copy(
+            hydrationMl = hydrationMl
+        )
+    }
 }

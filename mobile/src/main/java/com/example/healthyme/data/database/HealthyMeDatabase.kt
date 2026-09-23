@@ -4,17 +4,27 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.healthyme.data.BottleDao
+import com.example.healthyme.data.BottleEntity
+import com.example.healthyme.data.HydrationEventDao
+import com.example.healthyme.data.HydrationEventEntity
 
 @Database(
     entities = [
-        HeartRateEntity::class
+        HeartRateEntity::class,
+        BottleEntity::class,
+        HydrationEventEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class HealthyMeDatabase : RoomDatabase() {
 
     abstract fun heartRateDao(): HeartRateDao
+
+    abstract fun bottleDao(): BottleDao
+
+    abstract fun hydrationEventDao(): HydrationEventDao
 
     companion object {
 
@@ -31,7 +41,9 @@ abstract class HealthyMeDatabase : RoomDatabase() {
                     context.applicationContext,
                     HealthyMeDatabase::class.java,
                     "healthyme_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
 
                 INSTANCE = instance
 
