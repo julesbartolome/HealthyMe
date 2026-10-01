@@ -11,6 +11,10 @@ import java.time.Instant
 import com.example.healthyme.HeartRateListenerService
 import com.example.healthyme.data.database.HealthyMeDatabase
 import com.example.healthyme.WatchDataMessenger
+import com.example.healthyme.model.DailyHydration
+import com.example.healthyme.model.DailySleep
+import com.example.healthyme.model.DailyHeartRate
+import kotlin.math.roundToInt
 
 class HealthRepository(private val context: Context) {
 
@@ -148,6 +152,205 @@ class HealthRepository(private val context: Context) {
             hydrationMl = hydrationMl
         )
 
+    }
+
+    suspend fun getWeeklyHydration(): List<DailyHydration> {
+
+        val zoneId =
+            java.time.ZoneId.systemDefault()
+
+        val today =
+            java.time.LocalDate.now()
+
+        val history =
+            mutableListOf<DailyHydration>()
+
+        for (daysAgo in 6 downTo 0) {
+
+            val date =
+                today.minusDays(daysAgo.toLong())
+
+            val startOfDay =
+                date
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+
+            val endOfDay =
+                date
+                    .plusDays(1)
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+
+            val amountMl =
+                database
+                    .hydrationEventDao()
+                    .getTotalHydrationForDay(
+                        startOfDay,
+                        endOfDay
+                    )
+
+            history.add(
+                DailyHydration(
+                    date = date,
+                    amountMl = amountMl
+                )
+            )
+        }
+
+        return history
+    }
+
+    suspend fun getWeeklySleep(): List<DailySleep> {
+
+        val zoneId =
+            java.time.ZoneId.systemDefault()
+
+        val today =
+            java.time.LocalDate.now()
+
+        val startDate =
+            today.minusDays(6)
+
+        /*
+         * Read slightly more than 7 days because an overnight
+         * sleep session may begin on the previous calendar day.
+         */
+        val queryStart =
+            startDate
+                .minusDays(1)
+                .atStartOfDay(zoneId)
+                .toInstant()
+
+        val queryEnd =
+            today
+                .plusDays(1)
+                .atStartOfDay(zoneId)
+                .toInstant()
+
+        val response =
+            healthConnectClient.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(
+                        queryStart,
+                        queryEnd
+                    )
+                )
+            )
+
+        /*
+         * Group sleep records by the local date
+         * on which the sleep session ended.
+         *
+         * Example:
+         * Sleep from 11 PM Monday → 7 AM Tuesday
+         * belongs to Tuesday's sleep result.
+         */
+        val minutesByDate =
+            response.records
+                .groupBy { record ->
+
+                    record.endTime
+                        .atZone(zoneId)
+                        .toLocalDate()
+                }
+                .mapValues { (_, records) ->
+
+                    records.sumOf { record ->
+
+                        Duration
+                            .between(
+                                record.startTime,
+                                record.endTime
+                            )
+                            .toMinutes()
+                    }
+                }
+
+        val history =
+            mutableListOf<DailySleep>()
+
+        for (daysAgo in 6 downTo 0) {
+
+            val date =
+                today.minusDays(daysAgo.toLong())
+
+            val totalMinutes =
+                minutesByDate[date] ?: 0L
+
+            history.add(
+                DailySleep(
+                    date = date,
+                    totalMinutes = totalMinutes
+                )
+            )
+        }
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Weekly sleep loaded: ${history.size} days"
+        )
+
+        return history
+    }
+
+    suspend fun getWeeklyRestingHeartRate():
+            List<DailyHeartRate> {
+
+        val zoneId =
+            java.time.ZoneId.systemDefault()
+
+        val today =
+            java.time.LocalDate.now()
+
+        val history =
+            mutableListOf<DailyHeartRate>()
+
+        for (daysAgo in 6 downTo 0) {
+
+            val date =
+                today.minusDays(
+                    daysAgo.toLong()
+                )
+
+            val startOfDay =
+                date
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+
+            val endOfDay =
+                date
+                    .plusDays(1)
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+
+            val average =
+                database
+                    .heartRateDao()
+                    .getAverageHeartRateForRange(
+                        startOfDay,
+                        endOfDay
+                    )
+
+            history.add(
+                DailyHeartRate(
+                    date = date,
+                    averageBpm =
+                        average?.roundToInt()
+                )
+            )
+        }
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Weekly resting HR loaded: ${history.size} days"
+        )
+
+        return history
     }
 }
 

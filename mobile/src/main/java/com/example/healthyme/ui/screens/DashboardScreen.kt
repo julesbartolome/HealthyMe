@@ -34,25 +34,39 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthyme.viewmodel.DashboardViewModel
+import com.example.healthyme.domain.HealthInterpretation
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import com.example.healthyme.domain.ActivityContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.heightIn
 
 @Composable
-fun DashboardScreen(
-    dashboardViewModel: DashboardViewModel = viewModel()
-) {
+fun DashboardScreen(dashboardViewModel: DashboardViewModel = viewModel()) {
 
     val context = LocalContext.current
 
-    /*
-     * Initialize dashboard and load health data.
-     */
+    val today = LocalDate.now()
+
+    val formattedDate =
+        today.format(
+            DateTimeFormatter.ofPattern(
+                "EEEE, MMMM d"
+            )
+        )
+
     LaunchedEffect(Unit) {
         dashboardViewModel.initialize(context)
     }
 
-    /*
-     * Listen for live updates from the Watch
-     * and hydration NFC events.
-     */
     DisposableEffect(context) {
 
         val healthReceiver = object : BroadcastReceiver() {
@@ -96,6 +110,17 @@ fun DashboardScreen(
                             hydration
                         )
                     }
+
+                    "com.example.healthyme.RESTING_HEART_RATE_SAVED" -> {
+
+                        android.util.Log.d(
+                            "HealthyMe",
+                            "Dashboard refreshing weekly resting HR"
+                        )
+
+                        dashboardViewModel
+                            .refreshWeeklyHeartRate()
+                    }
                 }
             }
         }
@@ -106,6 +131,9 @@ fun DashboardScreen(
             )
             addAction(
                 "com.example.healthyme.HYDRATION_UPDATED"
+            )
+            addAction(
+                "com.example.healthyme.RESTING_HEART_RATE_SAVED"
             )
         }
 
@@ -122,112 +150,286 @@ fun DashboardScreen(
     }
 
     val scrollState = rememberScrollState()
+    val progressPagerState =
+        rememberPagerState(
+            pageCount = { 3 }
+        )
+
+    val progressPagerScope =
+        rememberCoroutineScope()
     val healthData = dashboardViewModel.healthData
+    val activityContext =
+        dashboardViewModel.activityContext
+    val heartRateInterpretation =
+        if (healthData.heartRate > 0) {
+            HealthInterpretation.interpretHeartRate(
+                healthData.heartRate,
+                activityContext
+            )
+        } else {
+            null
+        }
+    val weeklyHydration =
+        dashboardViewModel.weeklyHydration
+    val weeklySleep =
+        dashboardViewModel.weeklySleep
+    val weeklyHeartRate =
+        dashboardViewModel.weeklyHeartRate
+    val sleepMinutes = parseSleepMinutes(healthData.sleepHours)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
-            .verticalScroll(scrollState)
-            .padding(20.dp)
-    ) {
+    val sleepInterpretation =
+        if (sleepMinutes != null) {
+            HealthInterpretation.interpretSleep(sleepMinutes)
+        } else {
+            null
+        }
 
-        // Header
-        Text(
-            text = "HealthyMe",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF222222)
-        )
-
-        Text(
-            text = "Your daily health overview",
-            fontSize = 14.sp,
-            color = Color.Gray
-        )
-
-        Spacer(
-            modifier = Modifier.height(20.dp)
-        )
-
-        // Heart Rate
-        HealthCard(
-            emoji = "❤️",
-            title = "Heart Rate",
-            value = if (healthData.heartRate > 0) {
-                healthData.heartRate.toString()
-            } else {
-                "--"
-            },
-            unit = "BPM",
-            status = if (healthData.heartRate > 0) {
-                "Live reading"
-            } else {
-                "Waiting for watch"
-            },
-            accentColor = Color(0xFFE53935)
-        )
-
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
-
-        // Sleep
-        HealthCard(
-            emoji = "🌙",
-            title = "Sleep",
-            value = healthData.sleepHours,
-            unit = "hrs",
-            status = if (healthData.sleepHours != "--") {
-                "Last night"
-            } else {
-                "No sleep data"
-            },
-            accentColor = Color(0xFF1E88E5)
-        )
-
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
-
-        // Hydration
-        HealthCard(
-            emoji = "💧",
-            title = "Hydration",
-            value = String.format(
-                "%,d",
+    val hydrationInterpretation =
+        if (healthData.hydrationMl > 0) {
+            HealthInterpretation.interpretHydration(
                 healthData.hydrationMl
-            ),
-            unit = "ml",
-            status = "Today's intake",
-            accentColor = Color(0xFF00ACC1)
-        )
+            )
+        } else {
+            null
+        }
 
-        Spacer(
-            modifier = Modifier.height(20.dp)
-        )
+    CompositionLocalProvider(LocalContentColor provides Color(0xFF222222)) {
 
-        // Daily Summary
-        Text(
-            text = "Today's Summary",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF222222)
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
+                .verticalScroll(scrollState)
+                .padding(20.dp)
+        ) {
 
-        Spacer(
-            modifier = Modifier.height(10.dp)
-        )
+            // Header
+            Text(
+                text = "HealthyMe",
+                fontSize = 30.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF1F1F1F)
+            )
 
-        DailySummaryCard(
-            heartRate = healthData.heartRate,
-            sleepHours = healthData.sleepHours,
-            hydrationMl = healthData.hydrationMl
-        )
+            Text(
+                text = "Your daily health overview",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF444444)
+            )
 
-        Spacer(
-            modifier = Modifier.height(20.dp)
-        )
+            Spacer(
+                modifier = Modifier.height(2.dp)
+            )
+
+            Text(
+                text = formattedDate,
+                fontSize = 13.sp,
+                color = Color(0xFF888888)
+            )
+
+            Spacer(
+                modifier = Modifier.height(24.dp)
+            )
+
+            // Heart Rate
+            HealthCard(
+                emoji = "❤️",
+                title = "Heart Rate",
+                value = if (healthData.heartRate > 0) {
+                    healthData.heartRate.toString()
+                } else {
+                    "--"
+                },
+                unit = "BPM",
+                status = heartRateInterpretation?.status
+                    ?: "Waiting for watch",
+                accentColor = Color(0xFFE53935)
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text(
+                text = "Current activity",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF444444)
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            ActivityContextSelector(
+                selected = activityContext,
+                onSelected = {
+                    dashboardViewModel.updateActivityContext(it)
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            // Sleep
+            HealthCard(
+                emoji = "🌙",
+                title = "Sleep",
+                value = healthData.sleepHours,
+                unit = "hrs",
+                status = sleepInterpretation?.status
+                    ?: "No sleep data",
+                accentColor = Color(0xFF1E88E5)
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            // Hydration
+            HealthCard(
+                emoji = "💧",
+                title = "Hydration",
+                value = String.format(
+                    "%,d",
+                    healthData.hydrationMl
+                ),
+                unit = "ml",
+                status = hydrationInterpretation?.status
+                    ?: "No intake yet",
+                accentColor = Color(0xFF00ACC1)
+            )
+
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
+
+            SectionHeader(
+                title = "Today's Summary",
+                subtitle = "A quick look at your health today"
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            DailySummaryCard(
+                heartRate = healthData.heartRate,
+                sleepHours = healthData.sleepHours,
+                hydrationMl = healthData.hydrationMl,
+                heartRateInterpretation = heartRateInterpretation,
+                sleepInterpretation = sleepInterpretation,
+                hydrationInterpretation = hydrationInterpretation
+            )
+
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
+
+            SectionHeader(
+                title = "7-Day Progress",
+                subtitle =
+                    "Swipe to explore your recent health trends"
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            WeeklyProgressTabs(
+                selectedPage =
+                    progressPagerState.currentPage,
+                onSelected = { page ->
+
+                    progressPagerScope.launch {
+
+                        progressPagerState
+                            .animateScrollToPage(page)
+                    }
+                }
+            )
+
+            Text(
+                text = "Tap a category or swipe left/right",
+                fontSize = 11.sp,
+                color = Color(0xFF888888),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+
+                HorizontalPager(
+                    state = progressPagerState,
+                    modifier = Modifier.fillMaxWidth()
+                ) { page ->
+
+                    when (page) {
+
+                        0 -> WeeklyHeartRateCard(
+                            weeklyHeartRate = weeklyHeartRate
+                        )
+
+                        1 -> WeeklySleepCard(
+                            weeklySleep = weeklySleep
+                        )
+
+                        2 -> WeeklyHydrationCard(
+                            weeklyHydration = weeklyHydration
+                        )
+                    }
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+
+                repeat(3) { index ->
+
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(
+                                if (progressPagerState.currentPage == index) {
+                                    8.dp
+                                } else {
+                                    6.dp
+                                }
+                            )
+                            .background(
+                                color =
+                                    if (
+                                        progressPagerState.currentPage == index
+                                    ) {
+                                        Color(0xFF444444)
+                                    } else {
+                                        Color(0xFFCCCCCC)
+                                    },
+                                shape = RoundedCornerShape(50)
+                            )
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+        }
     }
 }
 
@@ -236,7 +438,10 @@ fun DashboardScreen(
 fun DailySummaryCard(
     heartRate: Int,
     sleepHours: String,
-    hydrationMl: Int
+    hydrationMl: Int,
+    heartRateInterpretation: HealthInterpretation.Result?,
+    sleepInterpretation: HealthInterpretation.Result?,
+    hydrationInterpretation: HealthInterpretation.Result?
 ) {
 
     val completedItems = listOf(
@@ -260,15 +465,16 @@ fun DailySummaryCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = Color.White,
+            contentColor = Color(0xFF222222)
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            defaultElevation = 4.dp
         )
     ) {
 
         Column(
-            modifier = Modifier.padding(18.dp)
+            modifier = Modifier.padding(20.dp)
         ) {
 
             Text(
@@ -322,6 +528,68 @@ fun DailySummaryCard(
                     "No intake yet"
                 }
             )
+
+            Spacer(
+                modifier = Modifier.height(18.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = Color(0xFFEAF4EC),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+
+                Column {
+
+                    Text(
+                        text = "HealthyMe Companion",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(10.dp)
+                    )
+
+                    if (heartRateInterpretation != null) {
+
+                        CompanionMessage(
+                            emoji = "❤️",
+                            message = heartRateInterpretation.message
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+                    }
+
+                    if (sleepInterpretation != null) {
+
+                        CompanionMessage(
+                            emoji = "🌙",
+                            message = sleepInterpretation.message
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+                    }
+
+                    if (hydrationInterpretation != null) {
+
+                        CompanionMessage(
+                            emoji = "💧",
+                            message = hydrationInterpretation.message
+                        )
+                    }
+                }
+            }
+
         }
     }
 }
@@ -369,6 +637,41 @@ fun SummaryRow(
     }
 }
 
+@Composable
+fun CompanionMessage(
+    emoji: String,
+    message: String
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+
+        Text(
+            text = emoji,
+            fontSize = 18.sp
+        )
+
+        Spacer(
+            modifier = Modifier.size(10.dp)
+        )
+
+        Text(
+            text = message,
+            fontSize = 13.sp,
+            color = Color(0xFF3F3F3F),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
 
 @Composable
 fun HealthCard(
@@ -384,24 +687,25 @@ fun HealthCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = Color.White,
+            contentColor = Color(0xFF222222)
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            defaultElevation = 4.dp
         )
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
+                .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
             // Icon
             Box(
                 modifier = Modifier
-                    .size(52.dp)
+                    .size(56.dp)
                     .background(
                         color = accentColor.copy(alpha = 0.12f),
                         shape = RoundedCornerShape(14.dp)
@@ -427,14 +731,33 @@ fun HealthCard(
                 Text(
                     text = title,
                     fontSize = 15.sp,
-                    color = Color.Gray
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF444444)
                 )
 
-                Text(
-                    text = status,
-                    fontSize = 12.sp,
-                    color = Color.Gray
+                Spacer(
+                    modifier = Modifier.height(4.dp)
                 )
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = accentColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(50)
+                        )
+                        .padding(
+                            horizontal = 10.dp,
+                            vertical = 4.dp
+                        )
+                ) {
+
+                    Text(
+                        text = status,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentColor
+                    )
+                }
             }
 
             // Value
@@ -448,7 +771,7 @@ fun HealthCard(
 
                     Text(
                         text = value,
-                        fontSize = 25.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = accentColor
                     )
@@ -467,3 +790,1023 @@ fun HealthCard(
         }
     }
 }
+
+private fun parseSleepMinutes(
+    sleepHours: String
+): Long? {
+
+    if (sleepHours == "--") {
+        return null
+    }
+
+    val parts = sleepHours.split(":")
+
+    if (parts.size != 2) {
+        return null
+    }
+
+    val hours = parts[0].toLongOrNull()
+        ?: return null
+
+    val minutes = parts[1].toLongOrNull()
+        ?: return null
+
+    return (hours * 60) + minutes
+}
+
+@Composable
+fun WeeklyHydrationCard(
+    weeklyHydration: List<com.example.healthyme.model.DailyHydration>
+) {
+
+    val adequateDays =
+        weeklyHydration.count {
+            HealthInterpretation.isHydrationAdequate(
+                it.amountMl
+            )
+        }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White,
+            contentColor = Color(0xFF222222)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 590.dp)
+                .padding(18.dp)
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .background(
+                        color = Color(0xFFE0F7FA),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Weekly hydration",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF006064)
+                )
+
+                Text(
+                    text = "$adequateDays/${weeklyHydration.size} adequate days",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF00ACC1)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            if (weeklyHydration.isEmpty()) {
+
+                Text(
+                    text = "No hydration history available yet.",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+
+                return@Column
+            }
+
+            weeklyHydration.forEach { day ->
+
+                WeeklyHydrationRow(
+                    day = day
+                )
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 110.dp)
+                    .background(
+                        color = Color(0xFFE0F7FA),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+
+                Row(
+                    verticalAlignment = Alignment.Top
+                ) {
+
+                    Text(
+                        text = "💧",
+                        fontSize = 20.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.size(10.dp)
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = "HealthyMe Companion",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00838F)
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(4.dp)
+                        )
+
+                        Text(
+                            text = weeklyHydrationMessage(
+                                adequateDays = adequateDays,
+                                totalDays = weeklyHydration.size
+                            ),
+                            fontSize = 13.sp,
+                            color = Color(0xFF444444)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyHydrationRow(
+    day: com.example.healthyme.model.DailyHydration
+) {
+
+    val interpretation =
+        HealthInterpretation.interpretHydration(
+            day.amountMl
+        )
+
+    val dayName =
+        day.date.dayOfWeek
+            .name
+            .take(3)
+            .lowercase()
+            .replaceFirstChar {
+                it.uppercase()
+            }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color(0xFFF8F8F8),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+
+            Text(
+                text = dayName,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF222222)
+            )
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
+            )
+
+            Text(
+                text = interpretation.status,
+                fontSize = 11.sp,
+                color = Color(0xFF777777)
+            )
+        }
+
+        Text(
+            text = "${day.amountMl} ml",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF00ACC1)
+        )
+    }
+}
+
+private fun weeklyHydrationMessage(
+    adequateDays: Int,
+    totalDays: Int
+): String {
+
+    return when {
+
+        adequateDays == totalDays && totalDays > 0 -> {
+            "You stayed within the adequate hydration range every day this week. Great consistency!"
+        }
+
+        adequateDays >= 5 -> {
+            "You stayed within the adequate hydration range on $adequateDays of the last $totalDays days. Nice work!"
+        }
+
+        adequateDays >= 3 -> {
+            "You reached the adequate hydration range on $adequateDays of the last $totalDays days. Keep building the habit."
+        }
+
+        adequateDays > 0 -> {
+            "You reached the adequate hydration range on $adequateDays of the last $totalDays days. Try to stay more consistent."
+        }
+
+        else -> {
+            "You haven't reached the adequate hydration range recently. Try drinking water more regularly throughout the day."
+        }
+    }
+}
+
+@Composable
+fun WeeklySleepCard(
+    weeklySleep: List<com.example.healthyme.model.DailySleep>
+) {
+
+    val recommendedDays =
+        weeklySleep.count {
+            it.totalMinutes > 0 &&
+                    HealthInterpretation
+                        .interpretSleep(it.totalMinutes)
+                        .status == "Recommended sleep"
+        }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White,
+            contentColor = Color(0xFF222222)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 590.dp)
+                .padding(18.dp)
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .background(
+                        color = Color(0xFFE3F2FD),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Weekly sleep",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF0D47A1)
+                )
+
+                Text(
+                    text = "$recommendedDays/${weeklySleep.size} recommended nights",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E88E5)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            if (weeklySleep.isEmpty()) {
+
+                Text(
+                    text = "No sleep history available yet.",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+
+                return@Column
+            }
+
+            weeklySleep.forEach { day ->
+
+                WeeklySleepRow(
+                    day = day
+                )
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 110.dp)
+                    .background(
+                        color = Color(0xFFE3F2FD),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+
+                Row(
+                    verticalAlignment = Alignment.Top
+                ) {
+
+                    Text(
+                        text = "🌙",
+                        fontSize = 20.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.size(10.dp)
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = "HealthyMe Companion",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1565C0)
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(4.dp)
+                        )
+
+                        Text(
+                            text = weeklySleepMessage(
+                                recommendedDays = recommendedDays,
+                                totalDays = weeklySleep.size
+                            ),
+                            fontSize = 13.sp,
+                            color = Color(0xFF444444)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklySleepRow(
+    day: com.example.healthyme.model.DailySleep
+) {
+
+    val dayName =
+        day.date.dayOfWeek
+            .name
+            .take(3)
+            .lowercase()
+            .replaceFirstChar {
+                it.uppercase()
+            }
+
+    val valueText =
+        if (day.totalMinutes > 0) {
+
+            val hours =
+                day.totalMinutes / 60
+
+            val minutes =
+                day.totalMinutes % 60
+
+            String.format(
+                "%d:%02d hrs",
+                hours,
+                minutes
+            )
+
+        } else {
+            "No data"
+        }
+
+    val status =
+        if (day.totalMinutes > 0) {
+
+            HealthInterpretation
+                .interpretSleep(
+                    day.totalMinutes
+                )
+                .status
+
+        } else {
+            "No sleep data"
+        }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color(0xFFF8F8F8),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+
+            Text(
+                text = dayName,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF222222)
+            )
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
+            )
+
+            Text(
+                text = status,
+                fontSize = 11.sp,
+                color = Color(0xFF777777)
+            )
+        }
+
+        Text(
+            text = valueText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1E88E5)
+        )
+    }
+}
+
+private fun weeklySleepMessage(
+    recommendedDays: Int,
+    totalDays: Int
+): String {
+
+    return when {
+
+        recommendedDays == totalDays &&
+                totalDays > 0 -> {
+
+            "You stayed within the recommended sleep range every night this week. Great consistency!"
+        }
+
+        recommendedDays >= 5 -> {
+
+            "You stayed within the recommended sleep range on $recommendedDays of the last $totalDays nights. Nice work!"
+        }
+
+        recommendedDays >= 3 -> {
+
+            "You reached the recommended sleep range on $recommendedDays of the last $totalDays nights. Keep working on a consistent sleep routine."
+        }
+
+        recommendedDays > 0 -> {
+
+            "You reached the recommended sleep range on $recommendedDays of the last $totalDays nights. Try to give yourself more consistent rest."
+        }
+
+        else -> {
+
+            "You haven't reached the recommended sleep range recently. Try to keep a more consistent bedtime and give yourself enough time to rest."
+        }
+    }
+}
+
+@Composable
+fun ActivityContextSelector(
+    selected: ActivityContext,
+    onSelected: (ActivityContext) -> Unit
+) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+
+        ActivityContextButton(
+            text = "Resting",
+            selected = selected == ActivityContext.RESTING,
+            onClick = {
+                onSelected(ActivityContext.RESTING)
+            },
+            modifier = Modifier.weight(1f)
+        )
+
+        ActivityContextButton(
+            text = "Light",
+            selected = selected == ActivityContext.LIGHT_ACTIVITY,
+            onClick = {
+                onSelected(ActivityContext.LIGHT_ACTIVITY)
+            },
+            modifier = Modifier.weight(1f)
+        )
+
+        ActivityContextButton(
+            text = "Intense",
+            selected = selected == ActivityContext.INTENSE_ACTIVITY,
+            onClick = {
+                onSelected(ActivityContext.INTENSE_ACTIVITY)
+            },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun ActivityContextButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor =
+                if (selected) {
+                    Color(0xFFE53935)
+                } else {
+                    Color(0xFFE8E8E8)
+                }
+        )
+    ) {
+
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontWeight =
+                if (selected) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Medium
+                },
+            color =
+                if (selected) {
+                    Color.White
+                } else {
+                    Color(0xFF333333)
+                }
+        )
+    }
+}
+
+@Composable
+fun SectionHeader(
+    title: String,
+    subtitle: String? = null
+) {
+
+    Column {
+
+        Text(
+            text = title,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF222222)
+        )
+
+        if (subtitle != null) {
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
+            )
+
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                color = Color(0xFF777777)
+            )
+        }
+    }
+}
+
+@Composable
+fun WeeklyHeartRateCard(
+    weeklyHeartRate:
+    List<com.example.healthyme.model.DailyHeartRate>
+) {
+
+    val withinRangeDays =
+        weeklyHeartRate.count { day ->
+            day.averageBpm?.let { bpm ->
+                bpm in 60..100
+            } == true
+        }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White,
+            contentColor = Color(0xFF222222)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 590.dp)
+                .padding(18.dp)
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .background(
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                horizontalArrangement =
+                    Arrangement.SpaceBetween,
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Resting heart rate",
+                    fontSize = 13.sp,
+                    fontWeight =
+                        FontWeight.SemiBold,
+                    color = Color(0xFFC62828)
+                )
+
+                Text(
+                    text =
+                        "$withinRangeDays/${weeklyHeartRate.size} within range",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE53935)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            if (weeklyHeartRate.isEmpty()) {
+
+                Text(
+                    text =
+                        "No resting heart-rate history available yet.",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+
+                return@Column
+            }
+
+            weeklyHeartRate.forEach { day ->
+
+                WeeklyHeartRateRow(day)
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 110.dp)
+                    .background(
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+
+                Row(
+                    verticalAlignment =
+                        Alignment.Top
+                ) {
+
+                    Text(
+                        text = "❤️",
+                        fontSize = 20.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.size(10.dp)
+                    )
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                "HealthyMe Companion",
+                            fontSize = 14.sp,
+                            fontWeight =
+                                FontWeight.Bold,
+                            color =
+                                Color(0xFFC62828)
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(4.dp)
+                        )
+
+                        Text(
+                            text =
+                                weeklyHeartRateMessage(
+                                    withinRangeDays,
+                                    weeklyHeartRate.size
+                                ),
+                            fontSize = 13.sp,
+                            color =
+                                Color(0xFF444444)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyHeartRateRow(
+    day: com.example.healthyme.model.DailyHeartRate
+) {
+
+    val dayName =
+        day.date.dayOfWeek
+            .name
+            .take(3)
+            .lowercase()
+            .replaceFirstChar {
+                it.uppercase()
+            }
+
+    val bpm =
+        day.averageBpm
+
+    val status =
+        if (bpm != null) {
+
+            HealthInterpretation
+                .interpretHeartRate(
+                    bpm,
+                    ActivityContext.RESTING
+                )
+                .status
+
+        } else {
+            "No resting data"
+        }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color(0xFFF8F8F8),
+                shape =
+                    RoundedCornerShape(10.dp)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+
+            Text(
+                text = dayName,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF222222)
+            )
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
+            )
+
+            Text(
+                text = status,
+                fontSize = 11.sp,
+                color = Color(0xFF777777)
+            )
+        }
+
+        Text(
+            text =
+                if (bpm != null) {
+                    "$bpm BPM"
+                } else {
+                    "No data"
+                },
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFE53935)
+        )
+    }
+}
+
+private fun weeklyHeartRateMessage(
+    withinRangeDays: Int,
+    totalDays: Int
+): String {
+
+    return when {
+
+        totalDays == 0 -> {
+            "No resting heart-rate history is available yet."
+        }
+
+        withinRangeDays == totalDays -> {
+            "Your recorded resting heart-rate averages stayed within the expected range throughout the week."
+        }
+
+        withinRangeDays >= 5 -> {
+            "Your resting heart-rate average was within the expected range on $withinRangeDays of the last $totalDays days."
+        }
+
+        withinRangeDays > 0 -> {
+            "Your resting heart-rate average was within the expected range on $withinRangeDays of the last $totalDays days. Keep tracking consistently."
+        }
+
+        else -> {
+            "There isn't enough in-range resting heart-rate history yet. Continue tracking while resting."
+        }
+    }
+}
+
+@Composable
+fun WeeklyProgressTabs(
+    selectedPage: Int,
+    onSelected: (Int) -> Unit
+) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+
+        ProgressTabButton(
+            text = "Heart Rate",
+            selected = selectedPage == 0,
+            accentColor =
+                Color(0xFFE53935),
+            onClick = {
+                onSelected(0)
+            },
+            modifier =
+                Modifier.weight(1f)
+        )
+
+        ProgressTabButton(
+            text = "Sleep",
+            selected = selectedPage == 1,
+            accentColor =
+                Color(0xFF1E88E5),
+            onClick = {
+                onSelected(1)
+            },
+            modifier =
+                Modifier.weight(1f)
+        )
+
+        ProgressTabButton(
+            text = "Hydration",
+            selected = selectedPage == 2,
+            accentColor =
+                Color(0xFF00ACC1),
+            onClick = {
+                onSelected(2)
+            },
+            modifier =
+                Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun ProgressTabButton(
+    text: String,
+    selected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    if (selected) {
+                        accentColor
+                    } else {
+                        Color(0xFFE8E8E8)
+                    }
+            ),
+        contentPadding =
+            androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 6.dp,
+                vertical = 9.dp
+            )
+    ) {
+
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight =
+                if (selected) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Medium
+                },
+            color =
+                if (selected) {
+                    Color.White
+                } else {
+                    Color(0xFF333333)
+                }
+        )
+    }
+}
+

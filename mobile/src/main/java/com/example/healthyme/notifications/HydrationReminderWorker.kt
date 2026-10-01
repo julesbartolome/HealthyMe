@@ -3,110 +3,231 @@ package com.example.healthyme.notifications
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
-import androidx.work.Worker
+import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.healthyme.R
 import com.example.healthyme.data.database.HealthyMeDatabase
-import kotlinx.coroutines.runBlocking
 import com.example.healthyme.wear.PhoneToWatchMessenger
+import java.time.Duration
+import java.time.LocalDate
+import java.time.ZoneId
 
 class HydrationReminderWorker(
     appContext: Context,
     workerParams: WorkerParameters
-) : Worker(appContext, workerParams) {
+) : CoroutineWorker(appContext, workerParams) {
 
-    private val reminderInterval =
-        2 * 60 * 60 * 1000L
+    companion object {
+        private const val MINIMUM_ADEQUATE_HYDRATION_ML = 5000
 
-    override fun doWork(): Result {
+        private const val INACTIVITY_INTERVAL =
+            60 * 60 * 1000L
 
-        val database =
-            HealthyMeDatabase.getDatabase(applicationContext)
+        private const val REMINDER_INTERVAL =
+            60 * 60 * 1000L
+    }
 
-        val latestEvent =
-            runBlocking {
-                database
-                    .hydrationEventDao()
-                    .getLatestEvent()
-            }
+    override suspend fun doWork(): Result {
 
-        if (latestEvent == null) {
-            return Result.success()
-        }
+        return try {
 
-        val currentTime = System.currentTimeMillis()
+            val database =
+                HealthyMeDatabase.getDatabase(applicationContext)
 
-        val timeSinceLastDrink =
-            currentTime - latestEvent.timestamp
+            val dao =
+                database.hydrationEventDao()
 
-        val twoHours =
-            1 * 60 * 1000L
+            val currentTime =
+                System.currentTimeMillis()
 
-        val preferences =
-            applicationContext.getSharedPreferences(
-                "hydration_reminders",
-                Context.MODE_PRIVATE
-            )
+            val startOfDay =
+                LocalDate.now()
+                    .atStartOfDay(
+                        ZoneId.systemDefault()
+                    )
+                    .toInstant()
+                    .toEpochMilli()
 
-        val lastReminderTime =
-            preferences.getLong("last_reminder_time", 0L)
+            val endOfDay =
+                LocalDate.now()
+                    .plusDays(1)
+                    .atStartOfDay(
+                        ZoneId.systemDefault()
+                    )
+                    .toInstant()
+                    .toEpochMilli()
 
-        val timeSinceLastReminder =
-            currentTime - lastReminderTime
+            val hydrationToday =
+                dao.getTotalHydrationForDay(
+                    startOfDay,
+                    endOfDay
+                )
 
-        if (
-            timeSinceLastDrink >= twoHours &&
-            timeSinceLastReminder >= reminderInterval
-        ) {
+            val latestEvent =
+                dao.getLatestEvent()
 
             android.util.Log.d(
                 "HealthyMe",
-                "Sending hydration reminder"
+                "Hydration reminder check: " +
+                        "$hydrationToday ml today"
             )
 
-            val notification =
-                NotificationCompat.Builder(
-                    applicationContext,
-                    "hydration_reminders"
+            /*
+             * Don't remind once the user has reached
+             * the adequate hydration benchmark.
+             */
+            if (
+                hydrationToday >=
+                MINIMUM_ADEQUATE_HYDRATION_ML
+            ) {
+
+                android.util.Log.d(
+                    "HealthyMe",
+                    "No hydration reminder: " +
+                            "adequate intake reached"
                 )
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
-                    .setContentTitle("Time to hydrate 💧")
-                    .setContentText(
-                        "It's been more than 2 hours since your last drink."
-                    )
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setAutoCancel(true)
-                    .build()
 
-            val notificationManager =
-                applicationContext.getSystemService(
-                    Context.NOTIFICATION_SERVICE
-                ) as NotificationManager
+                return Result.success()
+            }
 
-            notificationManager.notify(
-                1001,
-                notification
-            )
+            /*
+             * If there has never been a hydration event,
+             * skip for now.
+             *
+             * We'll improve this later so HealthyMe can
+             * give a morning/start-of-day reminder.
+             */
+            if (latestEvent == null) {
 
-            PhoneToWatchMessenger(applicationContext)
-                .sendHydrationReminder()
+                android.util.Log.d(
+                    "HealthyMe",
+                    "No hydration reminder: " +
+                            "no hydration events yet"
+                )
 
-            preferences
-                .edit()
-                .putLong(
+                return Result.success()
+            }
+
+            val timeSinceLastDrink =
+                currentTime - latestEvent.timestamp
+
+            val preferences =
+                applicationContext.getSharedPreferences(
+                    "hydration_reminders",
+                    Context.MODE_PRIVATE
+                )
+
+            val lastReminderTime =
+                preferences.getLong(
                     "last_reminder_time",
-                    currentTime
+                    0L
                 )
-                .apply()
-        } else {
-        android.util.Log.d(
-            "HealthyMe",
-            "No reminder sent. " +
-                    "Minutes since last reminder: " +
-                    "${timeSinceLastReminder / 60000}"
-        )
+
+            val timeSinceLastReminder =
+                currentTime - lastReminderTime
+
+            val shouldRemind =
+                timeSinceLastDrink >= INACTIVITY_INTERVAL &&
+                        timeSinceLastReminder >= REMINDER_INTERVAL
+
+            if (shouldRemind) {
+
+                sendReminder(
+                    hydrationToday = hydrationToday
+                )
+
+                preferences
+                    .edit()
+                    .putLong(
+                        "last_reminder_time",
+                        currentTime
+                    )
+                    .apply()
+
+            } else {
+
+                android.util.Log.d(
+                    "HealthyMe",
+                    "No hydration reminder. " +
+                            "Minutes since drink: " +
+                            "${timeSinceLastDrink / 60000}, " +
+                            "minutes since reminder: " +
+                            "${timeSinceLastReminder / 60000}"
+                )
+            }
+
+            Result.success()
+
+        } catch (e: Exception) {
+
+            android.util.Log.e(
+                "HealthyMe",
+                "Hydration reminder check failed",
+                e
+            )
+
+            Result.retry()
+        }
     }
 
-        return Result.success()
+    private fun sendReminder(
+        hydrationToday: Int
+    ) {
+
+        val remaining =
+            (
+                    MINIMUM_ADEQUATE_HYDRATION_ML -
+                            hydrationToday
+                    )
+                .coerceAtLeast(0)
+
+        val notification =
+            NotificationCompat.Builder(
+                applicationContext,
+                "hydration_reminders"
+            )
+                .setSmallIcon(
+                    R.drawable.ic_launcher_foreground
+                )
+                .setContentTitle(
+                    "Time for some water 💧"
+                )
+                .setContentText(
+                    "You've had $hydrationToday ml today. " +
+                            "Keep hydrating throughout the day."
+                )
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(
+                            "You've had $hydrationToday ml today. " +
+                                    "About $remaining ml more would bring " +
+                                    "you to the adequate hydration range."
+                        )
+                )
+                .setPriority(
+                    NotificationCompat.PRIORITY_DEFAULT
+                )
+                .setAutoCancel(true)
+                .build()
+
+        val notificationManager =
+            applicationContext.getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
+
+        notificationManager.notify(
+            1001,
+            notification
+        )
+
+        PhoneToWatchMessenger(
+            applicationContext
+        ).sendHydrationReminder()
+
+        android.util.Log.d(
+            "HealthyMe",
+            "Hydration reminder sent. " +
+                    "Current intake: $hydrationToday ml"
+        )
     }
 }

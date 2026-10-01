@@ -38,6 +38,8 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import com.example.healthyme.notifications.HydrationSyncWorker
+import com.example.healthyme.notifications.SleepReminderScheduler
+import com.example.healthyme.notifications.MovementReminderWorker
 
 class MainActivity : ComponentActivity() {
 
@@ -232,6 +234,9 @@ class MainActivity : ComponentActivity() {
         createNotificationChannel()
         requestNotificationPermission()
         scheduleHydrationReminder()
+        scheduleMovementReminder()
+
+        SleepReminderScheduler.scheduleDaily(this)
 
         database = HealthyMeDatabase.getDatabase(this)
 
@@ -412,6 +417,13 @@ class MainActivity : ComponentActivity() {
                 TimeUnit.MINUTES
             ).build()
 
+        WorkManager
+            .getInstance(this)
+            .enqueueUniquePeriodicWork(
+                "hydration_reminder",
+                ExistingPeriodicWorkPolicy.KEEP,
+                reminderRequest
+            )
     }
 
     private fun createNotificationChannel() {
@@ -430,6 +442,34 @@ class MainActivity : ComponentActivity() {
                 getSystemService(NotificationManager::class.java)
 
             notificationManager.createNotificationChannel(channel)
+
+            val sleepChannel =
+                NotificationChannel(
+                    "sleep_reminders",
+                    "Sleep Reminders",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description =
+                        "Bedtime and sleep reminders"
+                }
+
+            notificationManager.createNotificationChannel(
+                sleepChannel
+            )
+
+            val movementChannel =
+                NotificationChannel(
+                    "movement_reminders",
+                    "Movement Reminders",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description =
+                        "Reminders to take movement breaks"
+                }
+
+            notificationManager.createNotificationChannel(
+                movementChannel
+            )
         }
     }
 
@@ -470,6 +510,23 @@ class MainActivity : ComponentActivity() {
                 "hydration_sync",
                 ExistingWorkPolicy.KEEP,
                 syncRequest
+            )
+    }
+
+    private fun scheduleMovementReminder() {
+
+        val request =
+            PeriodicWorkRequestBuilder<MovementReminderWorker>(
+                15,
+                TimeUnit.MINUTES
+            ).build()
+
+        WorkManager
+            .getInstance(this)
+            .enqueueUniquePeriodicWork(
+                "movement_reminder",
+                ExistingPeriodicWorkPolicy.KEEP,
+                request
             )
     }
 }

@@ -22,4 +22,17 @@ interface HeartRateDao {
         "SELECT * FROM heart_rate ORDER BY timestamp DESC LIMIT 1"
     )
     fun getLatestHeartRate(): Flow<HeartRateEntity?>
+
+    @Query(
+        """
+    SELECT AVG(bpm)
+    FROM heart_rate
+    WHERE timestamp >= :startTime
+    AND timestamp < :endTime
+    """
+    )
+    suspend fun getAverageHeartRateForRange(
+        startTime: Long,
+        endTime: Long
+    ): Double?
 }

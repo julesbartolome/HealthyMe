@@ -5,6 +5,12 @@ import android.content.Intent
 import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.example.healthyme.R
+
 
 class WatchDataListenerService : WearableListenerService() {
 
@@ -12,6 +18,8 @@ class WatchDataListenerService : WearableListenerService() {
 
         private const val PREFS_NAME = "healthyme_watch"
         private const val KEY_SLEEP = "sleep"
+        const val ACTION_SLEEP_REMINDER =
+            "com.example.healthyme.SLEEP_REMINDER"
 
         const val ACTION_SLEEP_UPDATED =
             "com.example.healthyme.SLEEP_UPDATED"
@@ -56,11 +64,6 @@ class WatchDataListenerService : WearableListenerService() {
                     .putString(KEY_SLEEP, sleepValue)
                     .apply()
 
-                val intent = Intent(ACTION_SLEEP_UPDATED)
-                intent.putExtra("sleep", sleepValue)
-
-                sendBroadcast(intent)
-
                 Log.d(
                     "HealthyMe",
                     "Sleep received from phone: $sleepValue"
@@ -91,11 +94,6 @@ class WatchDataListenerService : WearableListenerService() {
                     .putInt(KEY_HYDRATION, hydrationMl)
                     .apply()
 
-                val intent = Intent(ACTION_HYDRATION_UPDATED)
-                intent.putExtra("hydration", hydrationMl)
-
-                sendBroadcast(intent)
-
                 Log.d(
                     "HealthyMe",
                     "Hydration received from phone: $hydrationMl ml"
@@ -109,6 +107,172 @@ class WatchDataListenerService : WearableListenerService() {
                     e
                 )
             }
+        }
+
+        if (messageEvent.path == "/sleep_reminder") {
+
+            try {
+
+                val message =
+                    String(messageEvent.data)
+
+                createSleepNotificationChannel()
+
+                val notification =
+                    NotificationCompat.Builder(
+                        this,
+                        "sleep_reminders"
+                    )
+                        .setSmallIcon(
+                            R.drawable.ic_launcher_foreground
+                        )
+                        .setContentTitle(
+                            "Time to wind down 🌙"
+                        )
+                        .setContentText(message)
+                        .setStyle(
+                            NotificationCompat.BigTextStyle()
+                                .bigText(message)
+                        )
+                        .setPriority(
+                            NotificationCompat.PRIORITY_DEFAULT
+                        )
+                        .setAutoCancel(true)
+                        .build()
+
+                val notificationManager =
+                    getSystemService(
+                        Context.NOTIFICATION_SERVICE
+                    ) as NotificationManager
+
+                notificationManager.notify(
+                    2001,
+                    notification
+                )
+
+                Log.d(
+                    "HealthyMe",
+                    "Sleep reminder received from phone: $message"
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "HealthyMe",
+                    "Failed to show sleep reminder",
+                    e
+                )
+            }
+        }
+
+        if (messageEvent.path == "/movement_reminder") {
+
+            try {
+
+                val message =
+                    String(messageEvent.data)
+
+                createMovementNotificationChannel()
+
+                val notification =
+                    NotificationCompat.Builder(
+                        this,
+                        "movement_reminders"
+                    )
+                        .setSmallIcon(
+                            R.drawable.ic_launcher_foreground
+                        )
+                        .setContentTitle(
+                            "Time to move 🚶"
+                        )
+                        .setContentText(message)
+                        .setStyle(
+                            NotificationCompat.BigTextStyle()
+                                .bigText(message)
+                        )
+                        .setPriority(
+                            NotificationCompat.PRIORITY_DEFAULT
+                        )
+                        .setAutoCancel(true)
+                        .build()
+
+                val notificationManager =
+                    getSystemService(
+                        Context.NOTIFICATION_SERVICE
+                    ) as NotificationManager
+
+                notificationManager.notify(
+                    3001,
+                    notification
+                )
+
+                Log.d(
+                    "HealthyMe",
+                    "Movement reminder received from phone: $message"
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "HealthyMe",
+                    "Failed to show movement reminder",
+                    e
+                )
+            }
+        }
+    }
+
+    private fun createSleepNotificationChannel() {
+
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.O
+        ) {
+
+            val channel =
+                NotificationChannel(
+                    "sleep_reminders",
+                    "Sleep Reminders",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description =
+                        "Bedtime and sleep reminders"
+                }
+
+            val notificationManager =
+                getSystemService(
+                    NotificationManager::class.java
+                )
+
+            notificationManager
+                .createNotificationChannel(channel)
+        }
+    }
+
+    private fun createMovementNotificationChannel() {
+
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.O
+        ) {
+
+            val channel =
+                NotificationChannel(
+                    "movement_reminders",
+                    "Movement Reminders",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description =
+                        "Reminders to take movement breaks"
+                }
+
+            val notificationManager =
+                getSystemService(
+                    NotificationManager::class.java
+                )
+
+            notificationManager
+                .createNotificationChannel(channel)
         }
     }
 }

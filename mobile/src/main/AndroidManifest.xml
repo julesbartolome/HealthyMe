@@ -81,6 +81,10 @@
 
         </service>
 
+        <receiver
+            android:name=".notifications.SleepReminderReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

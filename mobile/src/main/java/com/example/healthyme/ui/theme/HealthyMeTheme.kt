@@ -1,11 +1,11 @@
 package com.example.healthyme.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val HealthyMeColors = darkColorScheme(
+private val HealthyMeColors = lightColorScheme(
 
     primary = Color(0xFF4CAF50),
 
@@ -13,9 +13,19 @@ private val HealthyMeColors = darkColorScheme(
 
     tertiary = Color(0xFFFF9800),
 
-    background = Color(0xFF121212),
+    background = Color(0xFFF5F5F5),
 
-    surface = Color(0xFF1E1E1E)
+    surface = Color.White,
+
+    onBackground = Color(0xFF222222),
+
+    onSurface = Color(0xFF222222),
+
+    onPrimary = Color.White,
+
+    onSecondary = Color.White,
+
+    onTertiary = Color.White
 )
 
 @Composable
