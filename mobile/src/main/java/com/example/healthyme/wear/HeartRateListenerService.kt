@@ -15,6 +15,35 @@ object HeartRateState {
 
 class HeartRateListenerService : WearableListenerService() {
 
+    private fun showHydrationNotification() {
+
+        val notificationManager =
+            getSystemService(
+                android.content.Context.NOTIFICATION_SERVICE
+            ) as android.app.NotificationManager
+
+        val notification =
+            androidx.core.app.NotificationCompat.Builder(
+                this,
+                "hydration_reminders"
+            )
+                .setSmallIcon(com.example.healthyme.R.drawable.ic_launcher_foreground)
+                .setContentTitle("Time to hydrate 💧")
+                .setContentText(
+                    "It's been more than 2 hours since your last drink."
+                )
+                .setPriority(
+                    androidx.core.app.NotificationCompat.PRIORITY_DEFAULT
+                )
+                .setAutoCancel(true)
+                .build()
+
+        notificationManager.notify(
+            2001,
+            notification
+        )
+    }
+
     override fun onMessageReceived(messageEvent: MessageEvent) {
 
         super.onMessageReceived(messageEvent)
@@ -59,6 +88,14 @@ class HeartRateListenerService : WearableListenerService() {
                     "Heart Rate saved to database: $heartRate BPM"
                 )
             }
+        }
+
+        if (messageEvent.path == "/hydration_reminder") {
+
+            Log.d(
+                "HealthyMe",
+                "Hydration reminder received from phone"
+            )
         }
     }
 }

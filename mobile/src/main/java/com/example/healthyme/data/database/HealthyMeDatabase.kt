@@ -8,6 +8,8 @@ import com.example.healthyme.data.BottleDao
 import com.example.healthyme.data.BottleEntity
 import com.example.healthyme.data.HydrationEventDao
 import com.example.healthyme.data.HydrationEventEntity
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -15,7 +17,7 @@ import com.example.healthyme.data.HydrationEventEntity
         BottleEntity::class,
         HydrationEventEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class HealthyMeDatabase : RoomDatabase() {
@@ -42,12 +44,28 @@ abstract class HealthyMeDatabase : RoomDatabase() {
                     HealthyMeDatabase::class.java,
                     "healthyme_database"
                 )
+                    .addMigrations(MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
 
                 INSTANCE = instance
 
                 instance
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+
+            override fun migrate(
+                database: SupportSQLiteDatabase
+            ) {
+
+                database.execSQL(
+                    """
+            ALTER TABLE hydration_events
+            ADD COLUMN synced INTEGER NOT NULL DEFAULT 0
+            """.trimIndent()
+                )
             }
         }
     }

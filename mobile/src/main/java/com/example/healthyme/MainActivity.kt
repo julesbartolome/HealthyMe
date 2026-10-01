@@ -22,10 +22,28 @@ import com.example.healthyme.ui.screens.RegisterBottleScreen
 import com.example.healthyme.data.BottleEntity
 import com.example.healthyme.data.HydrationEventEntity
 import android.content.Intent
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.example.healthyme.notifications.HydrationReminderWorker
+import java.util.concurrent.TimeUnit
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
+import com.example.healthyme.data.auth.FirestoreHydrationRepository
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import com.example.healthyme.notifications.HydrationSyncWorker
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var database: HealthyMeDatabase
+    private val firestoreHydrationRepository =
+        FirestoreHydrationRepository()
     private var tagToRegister by mutableStateOf<String?>(null)
     private var nfcAdapter: NfcAdapter? = null
 
@@ -75,9 +93,45 @@ class MainActivity : ComponentActivity() {
                             timestamp = System.currentTimeMillis()
                         )
 
-                        database
-                            .hydrationEventDao()
-                            .insertEvent(hydrationEvent)
+                        val eventId =
+                            database
+                                .hydrationEventDao()
+                                .insertEvent(hydrationEvent)
+
+                        val savedEvent =
+                            hydrationEvent.copy(
+                                id = eventId.toInt()
+                            )
+
+                        val firebaseResult =
+                            firestoreHydrationRepository
+                                .uploadHydrationEvent(savedEvent)
+
+                        firebaseResult.fold(
+
+                            onSuccess = {
+
+                                database
+                                    .hydrationEventDao()
+                                    .markAsSynced(savedEvent.id)
+
+                                Log.d(
+                                    "HealthyMe",
+                                    "Hydration event synced to Firebase: ${savedEvent.id}"
+                                )
+                            },
+
+                            onFailure = { error ->
+
+                                Log.e(
+                                    "HealthyMe",
+                                    "Hydration sync failed; event remains unsynced",
+                                    error
+                                )
+                            }
+                        )
+
+                        scheduleHydrationSync()
 
                         val now = java.time.LocalDate
                             .now()
@@ -108,6 +162,9 @@ class MainActivity : ComponentActivity() {
                         )
 
                         sendBroadcast(intent)
+
+                        WatchDataMessenger(this@MainActivity)
+                            .sendHydration(totalHydration)
 
 
                     } catch (e: Exception) {
@@ -172,6 +229,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        createNotificationChannel()
+        requestNotificationPermission()
+        scheduleHydrationReminder()
+
         database = HealthyMeDatabase.getDatabase(this)
 
         Log.d(
@@ -231,12 +292,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                 } else {
-
-                    DashboardScreen(
-                        onRequestSleepPermission = {
-                            requestHealthConnectPermissions()
-                        }
-                    )
+                    DashboardScreen()
                 }
             }
         }
@@ -346,5 +402,74 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun scheduleHydrationReminder() {
+
+        val reminderRequest =
+            PeriodicWorkRequestBuilder<HydrationReminderWorker>(
+                15,
+                TimeUnit.MINUTES
+            ).build()
+
+    }
+
+    private fun createNotificationChannel() {
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
+            val channel = NotificationChannel(
+                "hydration_reminders",
+                "Hydration Reminders",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Reminders to drink water"
+            }
+
+            val notificationManager =
+                getSystemService(NotificationManager::class.java)
+
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun requestNotificationPermission() {
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+            if (
+                checkSelfPermission(
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ),
+                    1001
+                )
+            }
+        }
+    }
+
+    private fun scheduleHydrationSync() {
+
+        val constraints =
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+        val syncRequest =
+            OneTimeWorkRequestBuilder<HydrationSyncWorker>()
+                .setConstraints(constraints)
+                .build()
+
+        WorkManager
+            .getInstance(this)
+            .enqueueUniqueWork(
+                "hydration_sync",
+                ExistingWorkPolicy.KEEP,
+                syncRequest
+            )
     }
 }

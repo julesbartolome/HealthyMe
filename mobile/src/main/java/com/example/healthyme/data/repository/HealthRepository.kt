@@ -10,6 +10,7 @@ import java.time.Duration
 import java.time.Instant
 import com.example.healthyme.HeartRateListenerService
 import com.example.healthyme.data.database.HealthyMeDatabase
+import com.example.healthyme.WatchDataMessenger
 
 class HealthRepository(private val context: Context) {
 
@@ -65,11 +66,13 @@ class HealthRepository(private val context: Context) {
                 "No sleep records found."
             )
 
+            WatchDataMessenger(context).sendSleep("--")
+            WatchDataMessenger(context).sendHydration(hydrationMl)
+
             return HealthData(
                 heartRate = HeartRateListenerService.getLatestHeartRate(context),
                 sleepHours = "--",
-                hydrationMl = hydrationMl,
-                steps = 6542
+                hydrationMl = hydrationMl
             )
         }
 
@@ -85,22 +88,6 @@ class HealthRepository(private val context: Context) {
             "Latest sleep record: " +
                     "${latestRecord.startTime} -> ${latestRecord.endTime}"
         )
-
-        /*
-         * Sleep can be split into multiple records.
-         *
-         * Example:
-         *
-         * 15:00 -> 23:00  = 8 hours
-         * 23:00 -> 00:00  = 1 hour
-         *
-         * Together:
-         *
-         * 9 hours
-         *
-         * We therefore include records that overlap the latest
-         * sleep period or are directly connected to it.
-         */
 
         val latestEnd = latestRecord.endTime
 
@@ -152,11 +139,13 @@ class HealthRepository(private val context: Context) {
             "Latest night's total sleep: $sleepText"
         )
 
+        WatchDataMessenger(context).sendSleep(sleepText)
+        WatchDataMessenger(context).sendHydration(hydrationMl)
+
         return HealthData(
             heartRate = HeartRateListenerService.getLatestHeartRate(context),
             sleepHours = sleepText,
-            hydrationMl = hydrationMl,
-            steps = 6542
+            hydrationMl = hydrationMl
         )
 
     }

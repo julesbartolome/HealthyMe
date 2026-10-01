@@ -8,7 +8,23 @@ import androidx.room.Query
 interface HydrationEventDao {
 
     @Insert
-    suspend fun insertEvent(event: HydrationEventEntity)
+    suspend fun insertEvent(
+        event: HydrationEventEntity
+    ): Long
+
+    @Query("""
+        SELECT * FROM hydration_events
+        WHERE synced = 0
+        ORDER BY timestamp ASC
+    """)
+    suspend fun getUnsyncedEvents(): List<HydrationEventEntity>
+
+    @Query("""
+        UPDATE hydration_events
+        SET synced = 1
+        WHERE id = :eventId
+    """)
+    suspend fun markAsSynced(eventId: Int)
 
     @Query("""
         SELECT * FROM hydration_events
@@ -31,4 +47,11 @@ interface HydrationEventDao {
         startOfDay: Long,
         endOfDay: Long
     ): Int
+
+    @Query("""
+        SELECT * FROM hydration_events
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """)
+    suspend fun getLatestEvent(): HydrationEventEntity?
 }

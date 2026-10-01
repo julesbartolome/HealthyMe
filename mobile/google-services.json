@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "451106173502",
+    "firebase_url": "https://healthyme-f817b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "healthyme-f817b",
+    "storage_bucket": "healthyme-f817b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:451106173502:android:f2b972f9c0fead0d92576f",
+        "android_client_info": {
+          "package_name": "com.example.healthyme"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_v5Eh78-aHXXE0AV15J1zQyol8SFg-x8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

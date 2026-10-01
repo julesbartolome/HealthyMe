@@ -15,6 +15,9 @@
         android:name="android.hardware.nfc"
         android:required="true" />
 
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Health Connect package visibility -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

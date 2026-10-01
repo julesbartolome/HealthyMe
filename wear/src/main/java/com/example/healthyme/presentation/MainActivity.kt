@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.colorspace.connect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -25,24 +24,29 @@ import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
 import androidx.health.services.client.data.DeltaDataType
 import androidx.lifecycle.lifecycleScope
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.example.healthyme.presentation.theme.HealthyMeTheme
 import kotlinx.coroutines.launch
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 
-// ... existing imports ...
+class MainActivity : ComponentActivity() {
 
-class MainActivity : ComponentActivity() {private val heartRateValue = mutableStateOf("--")
-
+    private val heartRateValue = mutableStateOf("--")
     private val heartRateStatus = mutableStateOf("Starting...")
     private val sleepValue = mutableStateOf("--")
-    private val sleepStatus = mutableStateOf("Fetching...")
-
-    // Initialize Health Connect Client
-    private val healthConnectClient by lazy { androidx.health.connect.client.HealthConnectClient.getOrCreate(this) }
+    private val sleepStatus = mutableStateOf("Waiting for phone")
+    private val hydrationValue = mutableStateOf(0)
 
     private lateinit var heartRateCallback: MeasureCallback
     // Declare measureClient at class level so it's accessible in functions
@@ -50,9 +54,51 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
     private lateinit var exerciseClient: androidx.health.services.client.ExerciseClient
     private lateinit var exerciseCallback: androidx.health.services.client.ExerciseUpdateCallback
     private lateinit var phoneMessenger: PhoneMessenger
+    private val hydrationReceiver = object : BroadcastReceiver() {
 
-    override fun onCreate(savedInstanceState: Bundle?) {installSplashScreen()
+        override fun onReceive(
+            context: Context?,
+            intent: Intent?
+        ) {
+
+            hydrationValue.value =
+                intent?.getIntExtra(
+                    "hydration",
+                    0
+                ) ?: 0
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        sleepValue.value =
+            WatchDataListenerService.getLatestSleep(this)
+
+        sleepStatus.value =
+            if (sleepValue.value == "--") {
+                "No sleep data"
+            } else {
+                "Last night"
+            }
+
+        hydrationValue.value =
+            WatchDataListenerService.getLatestHydration(this)
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                100
+            )
+        }
 
         setTheme(android.R.style.Theme_DeviceDefault)
 
@@ -61,6 +107,7 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
         measureClient = healthClient.measureClient
         exerciseClient = healthClient.exerciseClient
         phoneMessenger = PhoneMessenger(this)
+        phoneMessenger.requestHealthSync()
 
         // 2. Define the MeasureCallback (for heart rate)
         heartRateCallback = object : MeasureCallback {
@@ -121,7 +168,6 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
         ) { permissions ->
 
             val granted = permissions[android.Manifest.permission.BODY_SENSORS] == true
-            val sleepGranted = permissions["android.permission.health.READ_SLEEP"] == true
 
             if (granted) {
                 prepareHealthServices()
@@ -129,19 +175,30 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
                 heartRateStatus.value = "Permission Denied"
             }
 
-            if (sleepGranted) {
-                fetchSleepData()
-            }
         }
 
         // In onCreate, update the array:
         permissionRequest.launch(
             arrayOf(
                 android.Manifest.permission.BODY_SENSORS,
-                "android.permission.health.READ_SLEEP" // Add this string
             )
         )
 
+        val sleepFilter =
+            IntentFilter(WatchDataListenerService.ACTION_SLEEP_UPDATED)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                sleepReceiver,
+                sleepFilter,
+                RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            registerReceiver(
+                sleepReceiver,
+                sleepFilter
+            )
+        }
 
         setContent {
             HealthyMeTheme {
@@ -149,9 +206,28 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
                     heartRate = heartRateValue.value,
                     heartRateStatus = heartRateStatus.value,
                     sleepValue = sleepValue.value,
-                    sleepStatus = sleepStatus.value
+                    sleepStatus = sleepStatus.value,
+                    hydrationMl = hydrationValue.value
                 )
             }
+        }
+
+        val hydrationFilter =
+            IntentFilter(
+                WatchDataListenerService.ACTION_HYDRATION_UPDATED
+            )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                hydrationReceiver,
+                hydrationFilter,
+                RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            registerReceiver(
+                hydrationReceiver,
+                hydrationFilter
+            )
         }
     }
 
@@ -180,6 +256,10 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
 
     override fun onDestroy() {
         super.onDestroy()
+
+        unregisterReceiver(sleepReceiver)
+        unregisterReceiver(hydrationReceiver)
+
         lifecycleScope.launch {
             try {
                 measureClient.unregisterMeasureCallbackAsync(DataType.HEART_RATE_BPM, heartRateCallback).await()
@@ -189,41 +269,6 @@ class MainActivity : ComponentActivity() {private val heartRateValue = mutableSt
         }
     }
 
-    private fun fetchSleepData() {
-        lifecycleScope.launch {
-            try {
-                // 1. Define the time range (e.g., the last 24 hours)
-                val end = java.time.Instant.now()
-                val start = end.minus(java.time.Duration.ofDays(1))
-
-                // 2. Request sleep sessions
-                val response = healthConnectClient.readRecords(
-                    androidx.health.connect.client.request.ReadRecordsRequest(
-                        recordType = androidx.health.connect.client.records.SleepSessionRecord::class,
-                        timeRangeFilter = androidx.health.connect.client.time.TimeRangeFilter.between(start, end)
-                    )
-                )
-
-                // 3. Sum up the duration of all sleep sessions found
-                if (response.records.isNotEmpty()) {
-                    val totalMinutes = response.records.sumOf { record ->
-                        java.time.Duration.between(record.startTime, record.endTime).toMinutes()
-                    }
-                    val hours = totalMinutes / 60
-                    val mins = totalMinutes % 60
-
-                    sleepValue.value = String.format("%d:%02d", hours, mins)
-                    sleepStatus.value = "Last 24h"
-                } else {
-                    sleepValue.value = "0"
-                    sleepStatus.value = "No sleep recorded"
-                }
-            } catch (e: Exception) {
-                sleepStatus.value = "Error reading sleep"
-                android.util.Log.e("HealthyMe", "Sleep fetch failed", e)
-            }
-        }
-    }
 
 
 // ── Colour palette ─────────────────────────────────────────────
@@ -239,7 +284,8 @@ fun HealthyMeDashboard(
     heartRate: String,
     heartRateStatus: String,
     sleepValue: String,
-    sleepStatus: String
+    sleepStatus: String,
+    hydrationMl: Int
 ) {
     // Create a scroll state for the list
     val listState = rememberScalingLazyListState()
@@ -306,9 +352,9 @@ fun HealthyMeDashboard(
                 DashboardCard(
                     emoji = "💧",
                     label = "Hydration",
-                    value = "--",
+                    value = hydrationMl.toString(),
                     unit = "ml",
-                    subtext = "Coming soon",
+                    subtext = "Today's intake",
                     accentColor = CardCyan
                 )
             }
@@ -358,6 +404,23 @@ fun DashboardCard(
                 }
                 Text(text = subtext, fontSize = 9.sp, color = Color.Gray)
             }
+        }
+    }
+}
+    private val sleepReceiver = object : BroadcastReceiver() {
+
+        override fun onReceive(context: Context?, intent: Intent?) {
+
+            val sleep = intent?.getStringExtra("sleep") ?: return
+
+            sleepValue.value = sleep
+
+            sleepStatus.value =
+                if (sleep == "--") {
+                    "No sleep data"
+                } else {
+                    "Last night"
+                }
         }
     }
 }

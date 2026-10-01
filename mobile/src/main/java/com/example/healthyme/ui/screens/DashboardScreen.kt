@@ -1,5 +1,9 @@
 package com.example.healthyme.ui.screens
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,48 +18,40 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthyme.viewmodel.DashboardViewModel
-import androidx.compose.ui.platform.LocalContext
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import androidx.core.content.ContextCompat
 
 @Composable
 fun DashboardScreen(
-    onRequestSleepPermission: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = viewModel()
 ) {
 
     val context = LocalContext.current
 
     /*
-     * Initialize the dashboard and load sleep data.
+     * Initialize dashboard and load health data.
      */
     LaunchedEffect(Unit) {
         dashboardViewModel.initialize(context)
     }
 
     /*
-     * Listen for heart-rate updates from the Watch.
-     *
-     * Every time HeartRateListenerService receives a new BPM,
-     * it sends the HEART_RATE_UPDATED broadcast.
+     * Listen for live updates from the Watch
+     * and hydration NFC events.
      */
     DisposableEffect(context) {
 
@@ -80,7 +76,9 @@ fun DashboardScreen(
                                 "Dashboard received live heart rate: $heartRate BPM"
                             )
 
-                            dashboardViewModel.updateHeartRate(heartRate)
+                            dashboardViewModel.updateHeartRate(
+                                heartRate
+                            )
                         }
                     }
 
@@ -94,15 +92,21 @@ fun DashboardScreen(
                             "Dashboard received hydration update: $hydration ml"
                         )
 
-                        dashboardViewModel.updateHydration(hydration)
+                        dashboardViewModel.updateHydration(
+                            hydration
+                        )
                     }
                 }
             }
         }
 
         val intentFilter = IntentFilter().apply {
-            addAction("com.example.healthyme.HEART_RATE_UPDATED")
-            addAction("com.example.healthyme.HYDRATION_UPDATED")
+            addAction(
+                "com.example.healthyme.HEART_RATE_UPDATED"
+            )
+            addAction(
+                "com.example.healthyme.HYDRATION_UPDATED"
+            )
         }
 
         ContextCompat.registerReceiver(
@@ -118,7 +122,6 @@ fun DashboardScreen(
     }
 
     val scrollState = rememberScrollState()
-
     val healthData = dashboardViewModel.healthData
 
     Column(
@@ -143,35 +146,31 @@ fun DashboardScreen(
             color = Color.Gray
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Button(
-            onClick = {
-                android.util.Log.d(
-                    "HealthyMe",
-                    "SLEEP BUTTON PRESSED"
-                )
-
-                onRequestSleepPermission()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Connect Sleep Data")
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
 
         // Heart Rate
         HealthCard(
             emoji = "❤️",
             title = "Heart Rate",
-            value = healthData.heartRate.toString(),
+            value = if (healthData.heartRate > 0) {
+                healthData.heartRate.toString()
+            } else {
+                "--"
+            },
             unit = "BPM",
-            status = "Good signal",
+            status = if (healthData.heartRate > 0) {
+                "Live reading"
+            } else {
+                "Waiting for watch"
+            },
             accentColor = Color(0xFFE53935)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(
+            modifier = Modifier.height(12.dp)
+        )
 
         // Sleep
         HealthCard(
@@ -179,35 +178,34 @@ fun DashboardScreen(
             title = "Sleep",
             value = healthData.sleepHours,
             unit = "hrs",
-            status = "Last night",
+            status = if (healthData.sleepHours != "--") {
+                "Last night"
+            } else {
+                "No sleep data"
+            },
             accentColor = Color(0xFF1E88E5)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(
+            modifier = Modifier.height(12.dp)
+        )
 
         // Hydration
         HealthCard(
             emoji = "💧",
             title = "Hydration",
-            value = String.format("%,d", healthData.hydrationMl),
+            value = String.format(
+                "%,d",
+                healthData.hydrationMl
+            ),
             unit = "ml",
             status = "Today's intake",
             accentColor = Color(0xFF00ACC1)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Activity
-        HealthCard(
-            emoji = "🚶",
-            title = "Activity",
-            value = String.format("%,d", healthData.steps),
-            unit = "steps",
-            status = "Today's activity",
-            accentColor = Color(0xFF43A047)
+        Spacer(
+            modifier = Modifier.height(20.dp)
         )
-
-        Spacer(modifier = Modifier.height(20.dp))
 
         // Daily Summary
         Text(
@@ -217,37 +215,157 @@ fun DashboardScreen(
             color = Color(0xFF222222)
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            )
+        DailySummaryCard(
+            heartRate = healthData.heartRate,
+            sleepHours = healthData.sleepHours,
+            hydrationMl = healthData.hydrationMl
+        )
+
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
+    }
+}
+
+
+@Composable
+fun DailySummaryCard(
+    heartRate: Int,
+    sleepHours: String,
+    hydrationMl: Int
+) {
+
+    val completedItems = listOf(
+        heartRate > 0,
+        sleepHours != "--",
+        hydrationMl > 0
+    ).count { it }
+
+    val summaryText = when (completedItems) {
+
+        3 -> "Your health data is up to date for today."
+
+        2 -> "Most of your health data is available."
+
+        1 -> "Some health data is available."
+
+        else -> "No health data has been recorded yet."
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+
+        Column(
+            modifier = Modifier.padding(18.dp)
         ) {
 
-            Column(
-                modifier = Modifier.padding(18.dp)
-            ) {
+            Text(
+                text = summaryText,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF222222)
+            )
 
-                Text(
-                    text = "You're doing well!",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Spacer(
+                modifier = Modifier.height(14.dp)
+            )
 
-                Spacer(modifier = Modifier.height(6.dp))
+            SummaryRow(
+                emoji = "❤️",
+                label = "Heart Rate",
+                value = if (heartRate > 0) {
+                    "$heartRate BPM"
+                } else {
+                    "No data"
+                }
+            )
 
-                Text(
-                    text = "Keep monitoring your health throughout the day.",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-            }
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            SummaryRow(
+                emoji = "🌙",
+                label = "Sleep",
+                value = if (sleepHours != "--") {
+                    "$sleepHours hrs"
+                } else {
+                    "No data"
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            SummaryRow(
+                emoji = "💧",
+                label = "Hydration",
+                value = if (hydrationMl > 0) {
+                    String.format(
+                        "%,d ml",
+                        hydrationMl
+                    )
+                } else {
+                    "No intake yet"
+                }
+            )
+        }
+    }
+}
+
+
+@Composable
+fun SummaryRow(
+    emoji: String,
+    label: String,
+    value: String
+) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                text = emoji,
+                fontSize = 18.sp
+            )
+
+            Spacer(
+                modifier = Modifier.size(8.dp)
+            )
+
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF222222)
+        )
     }
 }
 
@@ -297,7 +415,9 @@ fun HealthCard(
                 )
             }
 
-            Spacer(modifier = Modifier.size(14.dp))
+            Spacer(
+                modifier = Modifier.size(14.dp)
+            )
 
             // Label
             Column(
@@ -333,7 +453,9 @@ fun HealthCard(
                         color = accentColor
                     )
 
-                    Spacer(modifier = Modifier.size(4.dp))
+                    Spacer(
+                        modifier = Modifier.size(4.dp)
+                    )
 
                     Text(
                         text = unit,
@@ -345,4 +467,3 @@ fun HealthCard(
         }
     }
 }
-

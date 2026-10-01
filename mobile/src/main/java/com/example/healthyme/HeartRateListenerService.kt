@@ -5,6 +5,10 @@ import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import android.content.Intent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.example.healthyme.data.repository.HealthRepository
 
 class HeartRateListenerService : WearableListenerService() {
 
@@ -55,6 +59,38 @@ class HeartRateListenerService : WearableListenerService() {
                     "Failed to read heart rate message",
                     e
                 )
+            }
+        }
+
+        if (messageEvent.path == "/request_health_sync") {
+
+            Log.d(
+                "HealthyMe",
+                "Watch requested health sync"
+            )
+
+            CoroutineScope(Dispatchers.IO).launch {
+
+                try {
+
+                    val healthRepository =
+                        HealthRepository(applicationContext)
+
+                    healthRepository.getTodayHealthData()
+
+                    Log.d(
+                        "HealthyMe",
+                        "Health sync sent to watch"
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        "HealthyMe",
+                        "Failed to respond to health sync request",
+                        e
+                    )
+                }
             }
         }
     }
